@@ -1,0 +1,11 @@
+server:
+  host: "127.0.0.1"
+  port: 8080
+database:
+  database: "mysql"
+  url: "@tcp(127.0.0.1:3306)/mychat"
+  username: "root"
+  password: "1q2w3e4r!!"
+kafka:
+  bootstrap-servers:
+    - "localhost:9092"
