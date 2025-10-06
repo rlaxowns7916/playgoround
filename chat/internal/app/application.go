@@ -9,8 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"playgoround/internal/config"
-	"playgoround/internal/database"
+	"playgoround/chat/internal/config"
+	"playgoround/chat/internal/database"
+	"playgoround/chat/internal/database/repository"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -20,13 +21,26 @@ type Application struct {
 	cfg        *config.Config
 	httpServer *echo.Echo
 	rdb        *database.Database
+	userRepo   *repository.UserRepository
+	roomRepo   *repository.RoomRepository
+	chatRepo   *repository.ChatRepository
 }
 
 func New(cfg *config.Config) (*Application, error) {
-	rdb, err := database.NewDatabase(&cfg.Database)
+	dbCfg := &database.DatabaseConfig{
+		Database: cfg.Database.Database,
+		URL:      cfg.Database.URL,
+		Username: cfg.Database.Username,
+		Password: cfg.Database.Password,
+	}
+	rdb, err := database.NewDatabase(dbCfg)
 	if err != nil {
 		return nil, err
 	}
+
+	userRepo := repository.NewUserRepository(rdb.DB())
+	roomRepo := repository.NewRoomRepository(rdb.DB())
+	chatRepo := repository.NewChatRepository(rdb.DB())
 
 	e := echo.New()
 	e.HideBanner = true
@@ -46,6 +60,9 @@ func New(cfg *config.Config) (*Application, error) {
 		httpServer: e,
 		rdb:        rdb,
 		cfg:        cfg,
+		userRepo:   userRepo,
+		roomRepo:   roomRepo,
+		chatRepo:   chatRepo,
 	}
 
 	return app, nil
@@ -75,4 +92,17 @@ func (a *Application) Stop(ctx context.Context) error {
 		err2 = a.rdb.Close()
 	}
 	return errors.Join(err1, err2)
+}
+
+// Repository getters
+func (a *Application) UserRepo() *repository.UserRepository {
+	return a.userRepo
+}
+
+func (a *Application) RoomRepo() *repository.RoomRepository {
+	return a.roomRepo
+}
+
+func (a *Application) ChatRepo() *repository.ChatRepository {
+	return a.chatRepo
 }

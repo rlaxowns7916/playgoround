@@ -4,18 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"playgoround/internal/config"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
 )
 
+type DatabaseConfig struct {
+	Database string
+	URL      string
+	Username string
+	Password string
+}
+
 type Database struct {
-	cfg *config.DatabaseConfig
+	cfg *DatabaseConfig
 	db  *sql.DB
 }
 
-func NewDatabase(cfg *config.DatabaseConfig) (*Database, error) {
+func NewDatabase(cfg *DatabaseConfig) (*Database, error) {
 	d := &Database{cfg: cfg}
 
 	if cfg == nil {
@@ -67,4 +73,8 @@ func (d *Database) Ping() error {
 	}
 
 	return nil
+}
+
+func (d *Database) DB() *sql.DB {
+	return d.db
 }

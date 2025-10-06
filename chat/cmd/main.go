@@ -5,10 +5,11 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
-	"playgoround/internal/app"
-	"playgoround/internal/config"
 	"syscall"
 	"time"
+
+	"playgoround/chat/internal/app"
+	"playgoround/chat/internal/config"
 )
 
 func main() {
