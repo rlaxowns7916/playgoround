@@ -1,92 +1,79 @@
 package main
 
 import (
-	"bufio"
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"net"
-	"os"
-	"os/signal"
-	"strings"
 	"sync"
-	"syscall"
 )
 
-func main() {
-	arguments := os.Args
-	if len(arguments) == 1 {
-		fmt.Println("Please provide port number")
-		return
-	}
-
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	port := fmt.Sprintf(":%s", arguments[1])
-	serverSocket, err := net.Listen("tcp", port)
-	if err != nil {
-		fmt.Printf("Error listening on port %s: %s\n", port, err)
-		return
-	}
-
-	wg := sync.WaitGroup{}
-
-	go func() {
-		for {
-			clientSocket, err := serverSocket.Accept()
-			if err == nil {
-				wg.Add(1)
-				go echo(clientSocket, &wg)
-			}
-		}
-	}()
-
-	<-ctx.Done()
-	serverSocket.Close()
-	wg.Wait()
-	fmt.Println("server shutdown")
-
+type TcpServer struct {
+	port     int
+	wg       sync.WaitGroup
+	listener net.Listener
 }
 
-func echo(clientSocket net.Conn, wg *sync.WaitGroup) {
-	defer func() {
-		wg.Done()
-		clientSocket.Close()
-	}()
+func NewTcpServer(port int) *TcpServer {
+	return &TcpServer{
+		port:     port,
+		wg:       sync.WaitGroup{},
+		listener: nil,
+	}
+}
 
-	r := bufio.NewReader(clientSocket)
-	w := bufio.NewWriter(clientSocket)
+func (t *TcpServer) Start() error {
+	if t.listener == nil {
+		listener, err := net.Listen("tcp", fmt.Sprintf(":%d", t.port))
+		if err != nil {
+			return err
+		}
+		t.listener = listener
+	}
+
+	return nil
+}
+
+func (t *TcpServer) Close() error {
+	if t.listener == nil {
+		return nil
+	}
+
+	if err := t.listener.Close(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *TcpServer) Wait() {
+	t.wg.Wait()
+}
+
+func (t *TcpServer) Serve(ctx context.Context, handler func(context.Context, net.Conn)) error {
+	if t.listener == nil {
+		return fmt.Errorf("listener not started")
+	}
 
 	for {
-		input, err := r.ReadString('\n')
-		if len(input) > 0 {
-			if "QUIT" == strings.TrimSpace(input) {
-				return
-			}
-			fmt.Printf(" >> [%s] %s\n", clientSocket.RemoteAddr(), input)
-
-			_, err = w.WriteString(input)
-			if err != nil {
-				fmt.Printf("Error writing to client: %s\n", err)
-				return
-			}
-
-			if err = w.Flush(); err != nil {
-				return
-			}
-			fmt.Printf(" << [%s] %s\n", clientSocket.RemoteAddr(), input)
-		}
-
+		conn, err := t.listener.Accept()
 		if err != nil {
-			switch err {
-			case io.EOF:
-				fmt.Println("Client closed the connection")
-			default:
-				fmt.Println("Error reading from client:", err)
+			if errors.Is(err, net.ErrClosed) {
+				fmt.Println("server closed")
+				break
 			}
-
-			return
+			fmt.Println("accept error:", err)
+			continue
 		}
+
+		t.wg.Add(1)
+		go func(conn net.Conn) {
+			defer func() {
+				t.wg.Done()
+				_ = conn.Close()
+			}()
+
+			handler(ctx, conn)
+		}(conn)
 	}
+	return nil
 }
